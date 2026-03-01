@@ -1,0 +1,168 @@
+/* ================= PAGE ================= */
+.Page {
+  position: relative;
+  min-height: 100vh;
+  background: #f4ecff;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  font-family: system-ui, sans-serif;
+  overflow: hidden;
+}
+
+.Navbar {
+  height: 50px;
+  width: 100%;
+  max-width: 1200px;
+  margin-top: 30px;
+  padding: 18px 40px;
+  border-radius: 15px;
+  background: linear-gradient(90deg, #8746d6, #6a13d4);
+  display: flex;
+  justify-content: center;   /* centers horizontally */
+  align-items: center;       /* centers vertically */
+  box-shadow: 0 18px 40px rgba(106,19,212,0.45);
+  z-index: 2;
+}
+.Brand {
+  color: #fff;
+  font-size: 22px;
+  font-weight: 700;
+}
+
+.NavButton {
+  background: #ffffff;
+  color: #6a13d4;
+  padding: 8px 18px;
+  border-radius: 20px;
+  text-decoration: none;
+  font-weight: 600;
+  transition: 0.3s ease;
+}
+
+.NavButton:hover {
+  transform: translateY(-2px);
+}
+
+/* ================= ANIMATED BACKGROUND ================= */
+.AnimatedBackground {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 0;
+}
+
+.AnimatedBackground::before,
+.AnimatedBackground::after {
+  content: '';
+  position: absolute;
+  width: 420px;
+  height: 420px;
+  border-radius: 50%;
+  background: radial-gradient(
+    circle,
+    rgba(135,70,214,0.6),
+    rgba(106,19,212,0.15),
+    transparent 70%
+  );
+  filter: blur(18px);
+  animation: floatOrb 22s ease-in-out infinite;
+}
+
+.AnimatedBackground::after {
+  width: 300px;
+  height: 300px;
+  left: 60%;
+  top: 55%;
+  animation-duration: 30s;
+}
+
+@keyframes floatOrb {
+  0% { transform: translate(-10%,90%) scale(1); }
+  50% { transform: translate(20%,-20%) scale(1.15); }
+  100% { transform: translate(-10%,90%) scale(1); }
+}
+
+.AnimatedBackground span {
+  position: absolute;
+  top: -30px;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: radial-gradient(
+    circle,
+    #fff,
+    rgba(180,120,255,0.9),
+    rgba(135,70,214,0.6)
+  );
+  animation: particleFall linear infinite;
+}
+
+.AnimatedBackground span:nth-child(1){left:10%;animation-duration:9s;}
+.AnimatedBackground span:nth-child(2){left:25%;animation-duration:12s;}
+.AnimatedBackground span:nth-child(3){left:40%;animation-duration:10s;}
+.AnimatedBackground span:nth-child(4){left:55%;animation-duration:14s;}
+.AnimatedBackground span:nth-child(5){left:70%;animation-duration:11s;}
+.AnimatedBackground span:nth-child(6){left:85%;animation-duration:13s;}
+
+@keyframes particleFall {
+  0% { transform: translateY(-40px); opacity:0; }
+  10% { opacity:1; }
+  100% { transform: translateY(130vh); opacity:0; }
+}
+
+/* ================= GRID ================= */
+.Grid {
+  margin-top: 60px;
+  position: relative;
+  z-index: 2;
+  display: grid;
+  grid-template-columns: 1.3fr 0.7fr;
+  grid-template-rows: 1fr 1fr;
+  gap: 40px;
+  width: 85%;
+  max-width: 1200px;
+}
+
+/* ================= IMAGE CARDS ================= */
+.ImageCard {
+  height: 320px;
+  border-radius: 28px;
+  overflow: hidden;
+  background: linear-gradient(90deg, #8746d6, #6a13d4);
+  box-shadow: 0 18px 40px rgba(106,19,212,0.45);
+}
+
+/* Slight continuous zoom animation */
+.ImageCard img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  animation: zoomPulse 10s ease-in-out infinite;
+}
+
+@keyframes zoomPulse {
+  0%   { transform: scale(1); }
+  50%  { transform: scale(1.05); }
+  100% { transform: scale(1); }
+}
+/* ================= LINK CARDS ================= */
+.LinkCard {
+  height: 320px;
+  border-radius: 28px;
+  background: linear-gradient(90deg, #8746d6, #6a13d4);
+  box-shadow: 0 18px 40px rgba(106,19,212,0.45);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-decoration: none;
+  color: #fff;
+  font-size: 22px;
+  font-weight: 700;
+  transition: background 0.3s ease;
+}
+
+/* Color shift only */
+.LinkCard:hover {
+  background: linear-gradient(90deg, #6a13d4, #8746d6);
+}

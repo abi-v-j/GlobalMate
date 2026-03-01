@@ -1,0 +1,185 @@
+/* ================= PAGE ================= */
+.Page {
+  position: relative;
+  min-height: 100vh;
+  padding: 20px;
+  font-family: system-ui, sans-serif;
+  background: #f4ecff;
+  overflow: hidden;
+}
+
+/* ================= ANIMATED BACKGROUND ================= */
+.AnimatedBackground {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+}
+
+/* Floating Orbs */
+.AnimatedBackground::before,
+.AnimatedBackground::after {
+  content: '';
+  position: absolute;
+  width: 420px;
+  height: 420px;
+  border-radius: 50%;
+  background: radial-gradient(
+    circle,
+    rgba(135, 70, 214, 0.6),
+    rgba(106, 19, 212, 0.15),
+    transparent 70%
+  );
+  filter: blur(18px);
+  animation: floatOrb 22s ease-in-out infinite;
+}
+
+.AnimatedBackground::after {
+  width: 300px;
+  height: 300px;
+  left: 60%;
+  top: 55%;
+  animation-duration: 30s;
+}
+
+@keyframes floatOrb {
+  0% { transform: translate(-10%, 90%) scale(1); }
+  50% { transform: translate(20%, -20%) scale(1.15); }
+  100% { transform: translate(-10%, 90%) scale(1); }
+}
+
+/* Particles */
+.AnimatedBackground span {
+  position: absolute;
+  top: -30px;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: radial-gradient(
+    circle,
+    #ffffff,
+    rgba(180,120,255,0.9),
+    rgba(135,70,214,0.6)
+  );
+  box-shadow:
+    0 0 12px rgba(180,120,255,1),
+    0 0 24px rgba(135,70,214,0.9),
+    0 0 40px rgba(106,19,212,0.7);
+  animation: particleFall linear infinite;
+}
+
+.AnimatedBackground span:nth-child(1) { left: 10%; animation-duration: 9s; }
+.AnimatedBackground span:nth-child(2) { left: 25%; animation-duration: 12s; }
+.AnimatedBackground span:nth-child(3) { left: 40%; animation-duration: 8s; }
+.AnimatedBackground span:nth-child(4) { left: 55%; animation-duration: 14s; }
+.AnimatedBackground span:nth-child(5) { left: 70%; animation-duration: 10s; }
+.AnimatedBackground span:nth-child(6) { left: 85%; animation-duration: 13s; }
+
+@keyframes particleFall {
+  0% { transform: translateY(-40px) scale(0.7); opacity: 0; }
+  10% { opacity: 1; }
+  50% { transform: translateY(60vh) scale(1.15); }
+  100% { transform: translateY(130vh) scale(1.3); opacity: 0; }
+}
+
+/* Accessibility */
+@media (prefers-reduced-motion: reduce) {
+  .AnimatedBackground,
+  .AnimatedBackground * {
+    animation: none;
+  }
+}
+
+/* ================= NAVBAR ================= */
+.Navbar {
+  position: relative;
+  z-index: 2;
+  background: linear-gradient(90deg, #8746d6, #6a13d4);
+  color: #FFFFFF;
+  height: 100px;
+  border-radius: 16px;
+  display: flex;
+  align-items: center;
+  padding: 0 24px;
+  margin-bottom: 24px;
+  backdrop-filter: blur(6px);
+  transition: all 0.3s ease;
+}
+
+.Navbar:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 12px 30px rgba(106,19,212,0.4);
+}
+
+.BackButton {
+  background: #ffffff;
+  color: #6a13d4;
+  border: none;
+  padding: 8px 18px;
+  border-radius: 20px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.Brand {
+  margin: 0 auto;
+  font-size: 22px;
+  font-weight: 700;
+}
+
+/* ================= LAYOUT ================= */
+.Content {
+  position: relative;
+  z-index: 2;
+  display: grid;
+  grid-template-columns: 1fr 2fr;
+  gap: 24px;
+}
+
+.RightSection {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+
+/* ================= CARDS ================= */
+.Card {
+  background: linear-gradient(90deg, #8746d6, #6a13d4);
+  border-radius: 20px;
+  padding: 24px;
+  min-height: 220px;
+  backdrop-filter: blur(8px);
+  box-shadow: 0 8px 20px rgba(106,19,212,0.35);
+  transition: all 0.3s ease;
+}
+
+.Card:hover {
+  transform: translateY(-3px);
+  opacity: 0.9;
+  box-shadow: 0 14px 34px rgba(106,19,212,0.55);
+}
+
+.CardTitle {
+  color: #FFFFFF;
+  font-size: 20px;
+  font-weight: 600;
+}
+
+/* ================= RESPONSIVE ================= */
+@media (max-width: 768px) {
+  .Content {
+    grid-template-columns: 1fr;
+  }
+
+  .Navbar {
+    height: auto;
+    flex-wrap: wrap;
+    padding: 16px;
+  }
+
+  .Brand {
+    width: 100%;
+    text-align: center;
+    margin: 0;
+  }
+}

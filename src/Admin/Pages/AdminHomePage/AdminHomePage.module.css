@@ -1,0 +1,49 @@
+.flexative {
+    display: flex;
+    gap: 30px;
+}
+
+
+
+.routesection {
+    /* background: linear-gradient(0deg, #562dea 0%, #000108 100%); */
+    /* background: linear-gradient(to bottom, #F7F9FC, #c6cace); */
+    background-color: linear-gradient(180deg, #0a3250c3, #08273f);
+    height: 635px;
+
+}
+
+.subdiv {
+    /* background-color:  #0a3250c3;
+    width: 1210px;
+    height: 100px;
+    border-radius: 10px;
+    margin-left: 20px;
+    margin-top: 20px;
+    display: flex;
+    justify-content: center;
+    font-family:'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    color: aliceblue;
+    font-size: 60px; */
+
+    background-color: #0a3250c3;
+    width: 1210px;
+    height: 100px;
+    border-radius: 10px;
+    margin-left: 20px;
+    margin-top: 20px;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+
+    /* NEW FONT STYLE */
+    font-family: 'Poppins', sans-serif;
+    font-size: 58px;
+    font-weight: 600;
+    color: #F7F9FC;
+    letter-spacing: 1px;
+    text-shadow: 0px 3px 10px rgba(0, 0, 0, 0.25);
+    background: linear-gradient(90deg, #0a3250c3, #08273f);
+    /* color: transparent; */
+
+}

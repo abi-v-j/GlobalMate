@@ -1,0 +1,179 @@
+/* ================= PAGE ================= */
+.Page {
+  position: relative;
+  min-height: 100vh;
+  background: #f4ecff;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  font-family: system-ui, sans-serif;
+  overflow: hidden;
+}
+
+/* Grid layout */
+.Grid {
+  position: relative;
+  z-index: 2;
+  display: flex;
+  flex-direction: column;   /* STACK vertically */
+  align-items: center;
+  gap: 40px;
+  width: 85%;
+  max-width: 1200px;
+}
+
+.AnimatedBackground {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 0;
+}
+
+.AnimatedBackground::before,
+.AnimatedBackground::after {
+  content: '';
+  position: absolute;
+  width: 420px;
+  height: 420px;
+  border-radius: 50%;
+  background: radial-gradient(
+    circle,
+    rgba(135,70,214,0.6),
+    rgba(106,19,212,0.15),
+    transparent 70%
+  );
+  filter: blur(18px);
+  animation: floatOrb 22s ease-in-out infinite;
+}
+
+.AnimatedBackground::after {
+  width: 300px;
+  height: 300px;
+  left: 60%;
+  top: 55%;
+  animation-duration: 30s;
+}
+
+@keyframes floatOrb {
+  0% { transform: translate(-10%,90%) scale(1); }
+  50% { transform: translate(20%,-20%) scale(1.15); }
+  100% { transform: translate(-10%,90%) scale(1); }
+}
+
+.AnimatedBackground span {
+  position: absolute;
+  top: -30px;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: radial-gradient(
+    circle,
+    #fff,
+    rgba(180,120,255,0.9),
+    rgba(135,70,214,0.6)
+  );
+  animation: particleFall linear infinite;
+}
+
+.AnimatedBackground span:nth-child(1){left:10%;animation-duration:9s;}
+.AnimatedBackground span:nth-child(2){left:25%;animation-duration:12s;}
+.AnimatedBackground span:nth-child(3){left:40%;animation-duration:10s;}
+.AnimatedBackground span:nth-child(4){left:55%;animation-duration:14s;}
+.AnimatedBackground span:nth-child(5){left:70%;animation-duration:11s;}
+.AnimatedBackground span:nth-child(6){left:85%;animation-duration:13s;}
+
+@keyframes particleFall {
+  0% { transform: translateY(-40px); opacity:0; }
+  10% { opacity:1; }
+  100% { transform: translateY(130vh); opacity:0; }
+}
+
+/* ================= INCOME CARD ================= */
+.Card {
+  position: relative;
+  z-index: 2;
+  width: 380px;
+  padding: 32px;
+  border-radius: 22px;
+  background: linear-gradient(90deg, #8746d6, #6a13d4);
+  box-shadow: 0 18px 40px rgba(106,19,212,0.45);
+}
+
+
+.Title {
+  text-align: center;
+  color: #ffffff;   /* FIX */
+  font-size: 22px;
+  font-weight: 700;
+  margin-bottom: 24px;
+}
+
+/* Fields */
+.Group {
+  display: flex;
+  flex-direction: column;
+  margin-bottom: 18px;
+}
+
+.Group label {
+  color: #ffffff;
+  font-size: 14px;
+  margin-bottom: 6px;
+}
+
+.Group input,
+.Group select {
+  padding: 10px 12px;
+  border-radius: 10px;
+  border: none;
+  outline: none;
+  font-size: 14px;
+}
+
+/* Button */
+.Button {
+  width: 100%;
+  padding: 12px;
+  border-radius: 14px;
+  border: none;
+  font-size: 15px;
+  font-weight: 600;
+  background: #ffffff;
+  color: #6a13d4;
+  cursor: pointer;
+  transition: all 0.3s ease;
+}
+
+.Button:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 10px 24px rgba(0,0,0,0.25);
+}
+
+.ListCard {
+  width: 100%;
+  max-width: 900px;
+  background: #fff;
+  border-radius: 16px;
+  padding: 24px;
+  box-shadow: 0 10px 30px rgba(0,0,0,0.15);
+}
+
+.Table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.Table th,
+.Table td {
+  padding: 10px;
+  text-align: center;
+  border-bottom: 1px solid #ddd;
+}
+
+.Table button {
+  margin: 0 5px;
+  padding: 4px 10px;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+}

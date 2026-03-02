@@ -150,7 +150,7 @@ const Login = () => {
         sessionStorage.setItem("role", "student");
         setRoleHint("student");
         notify("Student login successful!", "success");
-        navigate("/user/home");
+        navigate("/user");
         return;
       }
       notify("User role not found.", "error");

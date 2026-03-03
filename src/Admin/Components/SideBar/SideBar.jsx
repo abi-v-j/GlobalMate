@@ -15,15 +15,19 @@ import ThumbDownAltRoundedIcon from "@mui/icons-material/ThumbDownAltRounded";
 import LogoutRoundedIcon from "@mui/icons-material/LogoutRounded";
 import KeyboardArrowRightRoundedIcon from "@mui/icons-material/KeyboardArrowRightRounded";
 
+import WorkHistoryRoundedIcon from "@mui/icons-material/WorkHistoryRounded";
+
+// ...
+
 const NAV_ITEMS = [
-  { label: "Dashboard",        sub: "Overview & stats",     icon: DashboardRoundedIcon,            path: "/admin/dashboard",     badge: null },
-  { label: "Expense Category", sub: "Manage expenses",      icon: AttachMoneyRoundedIcon,          path: "/admin/expcategory",   badge: null },
-  { label: "Income Source",    sub: "Track income",         icon: AccountBalanceWalletRoundedIcon, path: "/admin/incsource",     badge: null },
-  { label: "Add Job",          sub: "Post new openings",    icon: AddCircleOutlineRoundedIcon,     path: "/admin/addjob",        badge: null },
-  { label: "Job Type",         sub: "Categorize roles",     icon: WorkRoundedIcon,                 path: "/admin/jobtype",       badge: null },
-  { label: "View Feedback",    sub: "User responses",       icon: FeedbackRoundedIcon,             path: "/admin/feedback",      badge: 4 },
-  { label: "Reply",            sub: "Send responses",       icon: ReplyRoundedIcon,                path: "/admin/reply",         badge: null },
-  { label: "View Complaint",   sub: "Resolve issues",       icon: ThumbDownAltRoundedIcon,         path: "/admin/viewcomplaint", badge: 2 },
+  { label: "Dashboard",        sub: "Overview & stats",     icon: DashboardRoundedIcon,            path: "/admin/dashboard",        badge: null },
+  { label: "Expense Category", sub: "Manage expenses",      icon: AttachMoneyRoundedIcon,          path: "/admin/expcategory",      badge: null },
+  { label: "Income Source",    sub: "Track income",         icon: AccountBalanceWalletRoundedIcon, path: "/admin/incsource",        badge: null },
+  { label: "Add Job",          sub: "Post new openings",    icon: AddCircleOutlineRoundedIcon,     path: "/admin/addjob",           badge: null },
+  { label: "Job Type",         sub: "Categorize roles",     icon: WorkRoundedIcon,                 path: "/admin/jobtype",          badge: null },
+  { label: "Applications",     sub: "Review applicants",    icon: WorkHistoryRoundedIcon,          path: "/admin/viewApplications", badge: null }, // ✅ NEW
+  { label: "View Feedback",    sub: "User responses",       icon: FeedbackRoundedIcon,             path: "/admin/feedback",         badge: 4 },
+  { label: "View Complaint",   sub: "Resolve issues",       icon: ThumbDownAltRoundedIcon,         path: "/admin/viewcomplaint",    badge: 2 },
 ];
 
 // ── single nav row
@@ -473,7 +477,6 @@ const SideBar = () => {
                 textOverflow: "ellipsis",
               }}
             >
-              admin@globalmate.com
             </Typography>
           </Box>
 

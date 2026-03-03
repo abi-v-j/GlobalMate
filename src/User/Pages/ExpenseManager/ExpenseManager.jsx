@@ -1,5 +1,5 @@
 // src/components/ExpenseManagerWorking.jsx
-import React, { useEffect, useMemo, useRef, useState, memo } from "react";
+import React, { useEffect, useMemo, useRef, useState, memo, useCallback } from "react";
 import supabase from "../../../global/Supabase";
 import {
   TextField,
@@ -102,7 +102,7 @@ const GLOBAL_CSS = `
   @keyframes bgDrift2 {
     0%  { transform:translate(0,0) scale(1); }
     50% { transform:translate(-70px,40px) scale(1.15); }
-    100%{ transform:translate(0,0) scale(1); }
+    100% { transform:translate(0,0) scale(1); }
   }
   @keyframes shimmerFlow {
     0%   { background-position:-200% center; }
@@ -346,6 +346,26 @@ const GLOBAL_CSS = `
   }
 `;
 
+/* ✅ Inject GLOBAL_CSS only ONCE */
+function useInjectGlobalCss(cssText) {
+  useEffect(() => {
+    const id = "expense-manager-global-css";
+    let styleTag = document.getElementById(id);
+    if (styleTag) return;
+
+    styleTag = document.createElement("style");
+    styleTag.id = id;
+    styleTag.type = "text/css";
+    styleTag.appendChild(document.createTextNode(cssText));
+    document.head.appendChild(styleTag);
+
+    return () => {
+      const existing = document.getElementById(id);
+      if (existing) existing.remove();
+    };
+  }, [cssText]);
+}
+
 const Orb = ({ style }) => (
   <div
     style={{
@@ -359,7 +379,95 @@ const Orb = ({ style }) => (
   />
 );
 
-const AnimNum = memo(function AnimNum({ value, prefix = "₹", color = "white" }) {
+/* =========================
+   FX HELPERS (Frankfurter -> open.er-api fallback)
+========================= */
+function numOrNaN(v) {
+  const n = Number(v);
+  return Number.isFinite(n) ? n : NaN;
+}
+
+async function fetchJsonWithTimeout(url, ms = 8000) {
+  const ctrl = new AbortController();
+  const t = setTimeout(() => ctrl.abort(), ms);
+  try {
+    const res = await fetch(url, { signal: ctrl.signal });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    return await res.json();
+  } finally {
+    clearTimeout(t);
+  }
+}
+
+// Provider 1: Frankfurter (supports many)
+async function fetchFrankfurterCurrencies() {
+  const json = await fetchJsonWithTimeout("https://api.frankfurter.app/currencies", 8000);
+  if (!json || typeof json !== "object") throw new Error("Frankfurter currencies invalid");
+  return json;
+}
+
+async function convertFrankfurter(amount, from, to) {
+  if (!amount) throw new Error("No amount");
+  if (!from || !to) throw new Error("Missing currency");
+
+  const f = String(from).toUpperCase();
+  const t = String(to).toUpperCase();
+  if (f === t) return { value: Number(amount), rate: 1 };
+
+  const url = `https://api.frankfurter.app/latest?amount=${encodeURIComponent(amount)}&from=${encodeURIComponent(
+    f
+  )}&to=${encodeURIComponent(t)}`;
+
+  const json = await fetchJsonWithTimeout(url, 9000);
+  const val = json?.rates?.[t];
+  if (val == null) throw new Error("Frankfurter conversion missing result");
+  const numericVal = Number(val);
+  if (!Number.isFinite(numericVal)) throw new Error("Frankfurter conversion not numeric");
+
+  const rate = numericVal / Number(amount);
+  return { value: numericVal, rate };
+}
+
+// Provider 2: open.er-api fallback
+async function convertOpenErApi(amount, from, to) {
+  if (!amount) throw new Error("No amount");
+  if (!from || !to) throw new Error("Missing currency");
+
+  const f = String(from).toUpperCase();
+  const t = String(to).toUpperCase();
+  if (f === t) return { value: Number(amount), rate: 1 };
+
+  const url = `https://open.er-api.com/v6/latest/${encodeURIComponent(f)}`;
+  const json = await fetchJsonWithTimeout(url, 9000);
+  const rates = json?.rates || json?.conversion_rates;
+  const r = rates?.[t];
+  if (r == null) throw new Error("Fallback conversion missing result");
+
+  const rate = Number(r);
+  if (!Number.isFinite(rate)) throw new Error("Fallback rate not numeric");
+
+  const value = Number(amount) * rate;
+  return { value, rate };
+}
+
+async function convertFx(amount, from, to) {
+  try {
+    return await convertFrankfurter(amount, from, to);
+  } catch (e1) {
+    try {
+      return await convertOpenErApi(amount, from, to);
+    } catch (e2) {
+      const m1 = e1?.message || "Frankfurter failed";
+      const m2 = e2?.message || "Fallback failed";
+      throw new Error(`Currency API failed. Frankfurter: ${m1} | Fallback: ${m2}`);
+    }
+  }
+}
+
+/* =========================
+   UI helpers
+========================= */
+const AnimNum = memo(function AnimNum({ value, prefix = "", color = "white" }) {
   const [display, setDisplay] = useState(0);
 
   useEffect(() => {
@@ -634,10 +742,7 @@ const CustomSelect = memo(function CustomSelect({ value, onChange, options, plac
           {selected ? (
             <>
               <div className="cs-option-dot" style={{ background: accent }} />
-              <span
-                className="cs-value"
-                style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}
-              >
+              <span className="cs-value" style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                 {selected.label}
               </span>
             </>
@@ -664,10 +769,19 @@ const CustomSelect = memo(function CustomSelect({ value, onChange, options, plac
             <div style={{ height: 2, background: `linear-gradient(90deg, transparent, ${accent}88, transparent)` }} />
             <div className="cs-dropdown-inner">
               {options.length === 0 && (
-                <div style={{ padding: "14px 12px", textAlign: "center", color: "rgba(255,255,255,0.25)", fontSize: 12, fontFamily: "'Outfit',sans-serif" }}>
+                <div
+                  style={{
+                    padding: "14px 12px",
+                    textAlign: "center",
+                    color: "rgba(255,255,255,0.25)",
+                    fontSize: 12,
+                    fontFamily: "'Outfit',sans-serif",
+                  }}
+                >
                   No options available
                 </div>
               )}
+
               {options.map((opt, i) => {
                 const isSelected = String(opt.id) === String(value);
                 return (
@@ -798,7 +912,6 @@ const EntryForm = memo(function EntryForm({
   accentColor,
   maxDate,
 
-  // Currency
   currencyV,
   setCurrencyV,
   currencyOpts,
@@ -829,7 +942,14 @@ const EntryForm = memo(function EntryForm({
         InputProps={{
           startAdornment: (
             <InputAdornment position="start">
-              <span style={{ color: `${accentColor}99`, fontSize: 14, fontFamily: "'Outfit',sans-serif", fontWeight: 700 }}>
+              <span
+                style={{
+                  color: `${accentColor}99`,
+                  fontSize: 14,
+                  fontFamily: "'Outfit',sans-serif",
+                  fontWeight: 700,
+                }}
+              >
                 {currencyEnabled ? "" : "₹"}
               </span>
             </InputAdornment>
@@ -943,48 +1063,16 @@ const EntryForm = memo(function EntryForm({
   );
 });
 
-function numOrNaN(v) {
-  const n = Number(v);
-  return Number.isFinite(n) ? n : NaN;
-}
-
-function isMissingColumnError(msg = "") {
-  const s = String(msg).toLowerCase();
-  return s.includes("column") && (s.includes("does not exist") || s.includes("unknown"));
-}
-
-async function fetchFrankfurterCurrencies() {
-  const res = await fetch("https://api.frankfurter.app/currencies");
-  if (!res.ok) throw new Error("Currency list failed");
-  const json = await res.json(); // { USD: "US Dollar", ... }
-  return json;
-}
-
-async function convertFrankfurter(amount, from, to) {
-  if (!amount) throw new Error("No amount");
-  if (!from || !to) throw new Error("Missing currency");
-  if (String(from).toUpperCase() === String(to).toUpperCase()) return Number(amount);
-
-  const url = `https://api.frankfurter.app/latest?amount=${encodeURIComponent(amount)}&from=${encodeURIComponent(
-    from
-  )}&to=${encodeURIComponent(to)}`;
-
-  const res = await fetch(url);
-  const json = await res.json();
-  const val = json?.rates?.[String(to).toUpperCase()];
-  if (val == null) throw new Error("Conversion failed");
-  return Number(val);
-}
-
 const ExpenseManagerWorking = ({ onBack }) => {
+  useInjectGlobalCss(GLOBAL_CSS);
+
   const uid = sessionStorage.getItem("uid") || "";
-
   const todayISO = useMemo(() => new Date().toISOString().slice(0, 10), []);
-  const isFutureDate = (d) => (d ? d > todayISO : false);
+  const isFutureDate = useCallback((d) => (d ? d > todayISO : false), [todayISO]);
 
-  const [now, setNow] = useState(() => new Date()); // ✅ prevents time jitter re-render loops
+  const [now, setNow] = useState(() => new Date());
   useEffect(() => {
-    const t = setInterval(() => setNow(new Date()), 60_000); // update each minute only
+    const t = setInterval(() => setNow(new Date()), 60_000);
     return () => clearInterval(t);
   }, []);
 
@@ -1046,7 +1134,7 @@ const ExpenseManagerWorking = ({ onBack }) => {
   const [calcOp, setCalcOp] = useState("+");
   const [calcResult, setCalcResult] = useState("");
 
-  // Currency converter (full)
+  // Currency converter
   const [fromCur, setFromCur] = useState("USD");
   const [toCur, setToCur] = useState("INR");
   const [curAmt, setCurAmt] = useState("1");
@@ -1054,44 +1142,58 @@ const ExpenseManagerWorking = ({ onBack }) => {
   const [curLoading, setCurLoading] = useState(false);
 
   const [toast, setToast] = useState({ open: false, msg: "", type: "success" });
-  const notify = (msg, type = "success") => setToast({ open: true, msg, type });
+  const notify = useCallback((msg, type = "success") => setToast({ open: true, msg, type }), []);
 
-  // Totals: ✅ always assume stored in INR in DB field (or fallback)
-  const totalInc = useMemo(() => incomes.reduce((s, r) => s + Number(r.income_amount || 0), 0), [incomes]);
-  const totalExp = useMemo(() => expenses.reduce((s, r) => s + Number(r.expense_amount || 0), 0), [expenses]);
+  // Totals: prefer *_amount_inr (your DB), fallback to *_amount
+  const totalInc = useMemo(
+    () => incomes.reduce((s, r) => s + Number(r.income_amount_inr ?? r.income_amount ?? 0), 0),
+    [incomes]
+  );
+  const totalExp = useMemo(
+    () => expenses.reduce((s, r) => s + Number(r.expense_amount_inr ?? r.expense_amount ?? 0), 0),
+    [expenses]
+  );
   const balance = totalInc - totalExp;
 
-  const loadProfile = async () => {
+  const loadProfile = useCallback(async () => {
     if (!uid) return setProfile(null);
     const { data, error } = await supabase.from("tbl_student").select("*").eq("id", uid).single();
     if (error) return setProfile(null);
     setProfile(data);
-  };
+  }, [uid]);
 
-  const loadCategories = async () => {
+  const loadCategories = useCallback(async () => {
     const { data } = await supabase.from("tbl_expenseCategory").select("*").order("Category_name", { ascending: true });
     setCategories(data || []);
-  };
+  }, []);
 
-  const loadSources = async () => {
+  const loadSources = useCallback(async () => {
     const { data } = await supabase.from("tbl_incSource").select("*").order("incSource_name", { ascending: true });
     setSources(data || []);
-  };
+  }, []);
 
-  const loadExpenses = async () => {
+  const loadExpenses = useCallback(async () => {
     if (!uid) return setExpenses([]);
-    const { data } = await supabase.from("tbl_expense").select("*").eq("student_id", uid).order("id", { ascending: false });
+    const { data } = await supabase
+      .from("tbl_expense")
+      .select("*")
+      .eq("student_id", uid)
+      .order("id", { ascending: false });
     setExpenses(data || []);
-  };
+  }, [uid]);
 
-  const loadIncomes = async () => {
+  const loadIncomes = useCallback(async () => {
     if (!uid) return setIncomes([]);
-    const { data } = await supabase.from("tbl_income").select("*").eq("student_id", uid).order("id", { ascending: false });
+    const { data } = await supabase
+      .from("tbl_income")
+      .select("*")
+      .eq("student_id", uid)
+      .order("id", { ascending: false });
     setIncomes(data || []);
-  };
+  }, [uid]);
 
-  // ✅ Load currencies once
-  const loadCurrencies = async () => {
+  // ✅ Load currencies once + keep fallback list if fails
+  const loadCurrencies = useCallback(async () => {
     try {
       const m = await fetchFrankfurterCurrencies();
       setCurrencyMap(m || {});
@@ -1101,10 +1203,9 @@ const ExpenseManagerWorking = ({ onBack }) => {
       if (opts.length) setCurrencyOptions(opts);
       setCurrenciesReady(true);
     } catch (e) {
-      // fallback already set
       setCurrenciesReady(true);
     }
-  };
+  }, []);
 
   useEffect(() => {
     loadProfile();
@@ -1116,65 +1217,25 @@ const ExpenseManagerWorking = ({ onBack }) => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // ✅ DB save helpers: attempt with extra currency fields, fallback without if columns missing
-  const insertIncome = async (payload) => {
-    // try with currency columns (if you created them)
-    const p1 = {
-      ...payload,
-      income_currency: payload.income_currency,
-      income_amount_original: payload.income_amount_original,
-    };
-    let r = await supabase.from("tbl_income").insert([p1]);
-    if (r.error && isMissingColumnError(r.error.message)) {
-      const { income_currency, income_amount_original, ...p2 } = p1;
-      r = await supabase.from("tbl_income").insert([p2]);
-    }
-    return r;
-  };
+  /* ✅ DB save helpers — EXACT columns as your tables */
+  const insertIncome = useCallback(async (payload) => {
+    return await supabase.from("tbl_income").insert([payload]);
+  }, []);
 
-  const updateIncomeRow = async (id, payload) => {
-    const p1 = {
-      ...payload,
-      income_currency: payload.income_currency,
-      income_amount_original: payload.income_amount_original,
-    };
-    let r = await supabase.from("tbl_income").update(p1).eq("id", id);
-    if (r.error && isMissingColumnError(r.error.message)) {
-      const { income_currency, income_amount_original, ...p2 } = p1;
-      r = await supabase.from("tbl_income").update(p2).eq("id", id);
-    }
-    return r;
-  };
+  const updateIncomeRow = useCallback(async (id, payload) => {
+    return await supabase.from("tbl_income").update(payload).eq("id", id);
+  }, []);
 
-  const insertExpense = async (payload) => {
-    const p1 = {
-      ...payload,
-      expense_currency: payload.expense_currency,
-      expense_amount_original: payload.expense_amount_original,
-    };
-    let r = await supabase.from("tbl_expense").insert([p1]);
-    if (r.error && isMissingColumnError(r.error.message)) {
-      const { expense_currency, expense_amount_original, ...p2 } = p1;
-      r = await supabase.from("tbl_expense").insert([p2]);
-    }
-    return r;
-  };
+  const insertExpense = useCallback(async (payload) => {
+    return await supabase.from("tbl_expense").insert([payload]);
+  }, []);
 
-  const updateExpenseRow = async (id, payload) => {
-    const p1 = {
-      ...payload,
-      expense_currency: payload.expense_currency,
-      expense_amount_original: payload.expense_amount_original,
-    };
-    let r = await supabase.from("tbl_expense").update(p1).eq("id", id);
-    if (r.error && isMissingColumnError(r.error.message)) {
-      const { expense_currency, expense_amount_original, ...p2 } = p1;
-      r = await supabase.from("tbl_expense").update(p2).eq("id", id);
-    }
-    return r;
-  };
+  const updateExpenseRow = useCallback(async (id, payload) => {
+    return await supabase.from("tbl_expense").update(payload).eq("id", id);
+  }, []);
 
-  const saveExpense = async () => {
+  /* ✅ SAVE EXPENSE (stores ALL currency fields) */
+  const saveExpense = useCallback(async () => {
     const amt = numOrNaN(expenseAmount);
     if (!expenseAmount || Number.isNaN(amt)) return notify("Enter valid expense amount", "error");
     if (!expenseDate) return notify("Select expense date", "error");
@@ -1184,16 +1245,22 @@ const ExpenseManagerWorking = ({ onBack }) => {
 
     setSavingExpense(true);
     try {
-      const inrAmount =
-        String(expenseCurrency).toUpperCase() === "INR" ? amt : await convertFrankfurter(amt, expenseCurrency, "INR");
+      const cur = String(expenseCurrency).toUpperCase();
+      const fx = cur === "INR" ? { value: amt, rate: 1 } : await convertFx(amt, cur, "INR");
+
+      const inrValue = Number(fx.value);
 
       const payload = {
-        expense_amount: Number(inrAmount), // ✅ stored in INR
+        expense_amount: inrValue, // keep INR for totals (and for legacy)
+        expense_amount_inr: inrValue,
         expense_date: expenseDate,
         category_id: Number(expenseCategoryId),
         student_id: uid,
-        expense_currency: String(expenseCurrency).toUpperCase(),
+
+        expense_currency: cur,
         expense_amount_original: Number(amt),
+        exchange_rate_to_inr: Number(fx.rate),
+        rate_date: expenseDate, // you can change to todayISO if you want
       };
 
       const { error } = await insertExpense(payload);
@@ -1210,27 +1277,36 @@ const ExpenseManagerWorking = ({ onBack }) => {
     } finally {
       setSavingExpense(false);
     }
-  };
+  }, [
+    expenseAmount,
+    expenseDate,
+    expenseCategoryId,
+    expenseCurrency,
+    uid,
+    insertExpense,
+    loadExpenses,
+    notify,
+    isFutureDate,
+  ]);
 
-  const startEditExpense = (row) => {
+  const startEditExpense = useCallback((row) => {
     setEditExpenseId(row.id);
-    // if you have original columns, prefer them
     const orig = row.expense_amount_original ?? row.expense_amount ?? "";
     setEditExpenseAmount(String(orig));
     setEditExpenseDate(row.expense_date || "");
     setEditExpenseCategoryId(String(row.category_id ?? ""));
     setEditExpenseCurrency(String(row.expense_currency || "INR"));
-  };
+  }, []);
 
-  const cancelEditExpense = () => {
+  const cancelEditExpense = useCallback(() => {
     setEditExpenseId(null);
     setEditExpenseAmount("");
     setEditExpenseDate("");
     setEditExpenseCategoryId("");
     setEditExpenseCurrency("INR");
-  };
+  }, []);
 
-  const updateExpense = async () => {
+  const updateExpense = useCallback(async () => {
     const amt = numOrNaN(editExpenseAmount);
     if (!editExpenseDate) return notify("Select expense date", "error");
     if (isFutureDate(editExpenseDate)) return notify("Future dates not allowed", "error");
@@ -1240,17 +1316,21 @@ const ExpenseManagerWorking = ({ onBack }) => {
 
     setSavingExpense(true);
     try {
-      const inrAmount =
-        String(editExpenseCurrency).toUpperCase() === "INR"
-          ? amt
-          : await convertFrankfurter(amt, editExpenseCurrency, "INR");
+      const cur = String(editExpenseCurrency).toUpperCase();
+      const fx = cur === "INR" ? { value: amt, rate: 1 } : await convertFx(amt, cur, "INR");
+
+      const inrValue = Number(fx.value);
 
       const payload = {
-        expense_amount: Number(inrAmount), // ✅ INR in DB
+        expense_amount: inrValue,
+        expense_amount_inr: inrValue,
         expense_date: editExpenseDate,
         category_id: Number(editExpenseCategoryId),
-        expense_currency: String(editExpenseCurrency).toUpperCase(),
+
+        expense_currency: cur,
         expense_amount_original: Number(amt),
+        exchange_rate_to_inr: Number(fx.rate),
+        rate_date: editExpenseDate,
       };
 
       const { error } = await updateExpenseRow(editExpenseId, payload);
@@ -1264,18 +1344,33 @@ const ExpenseManagerWorking = ({ onBack }) => {
     } finally {
       setSavingExpense(false);
     }
-  };
+  }, [
+    editExpenseAmount,
+    editExpenseDate,
+    editExpenseCategoryId,
+    editExpenseCurrency,
+    editExpenseId,
+    updateExpenseRow,
+    notify,
+    cancelEditExpense,
+    loadExpenses,
+    isFutureDate,
+  ]);
 
-  const deleteExpense = async (id) => {
-    const ok = window.confirm("Delete this expense?");
-    if (!ok) return;
-    const { error } = await supabase.from("tbl_expense").delete().eq("id", id);
-    if (error) return notify(error.message || "Delete failed", "error");
-    notify("Removed", "info");
-    loadExpenses();
-  };
+  const deleteExpense = useCallback(
+    async (id) => {
+      const ok = window.confirm("Delete this expense?");
+      if (!ok) return;
+      const { error } = await supabase.from("tbl_expense").delete().eq("id", id);
+      if (error) return notify(error.message || "Delete failed", "error");
+      notify("Removed", "info");
+      loadExpenses();
+    },
+    [loadExpenses, notify]
+  );
 
-  const saveIncome = async () => {
+  /* ✅ SAVE INCOME (stores ALL currency fields) */
+  const saveIncome = useCallback(async () => {
     const amt = numOrNaN(incomeAmount);
     if (!incomeAmount || Number.isNaN(amt)) return notify("Enter valid income amount", "error");
     if (!incomeDate) return notify("Select income date", "error");
@@ -1285,16 +1380,22 @@ const ExpenseManagerWorking = ({ onBack }) => {
 
     setSavingIncome(true);
     try {
-      const inrAmount =
-        String(incomeCurrency).toUpperCase() === "INR" ? amt : await convertFrankfurter(amt, incomeCurrency, "INR");
+      const cur = String(incomeCurrency).toUpperCase();
+      const fx = cur === "INR" ? { value: amt, rate: 1 } : await convertFx(amt, cur, "INR");
+
+      const inrValue = Number(fx.value);
 
       const payload = {
-        income_amount: Number(inrAmount), // ✅ stored in INR
+        income_amount: inrValue, // keep INR for totals (and for legacy)
+        income_amount_inr: inrValue,
         income_date: incomeDate,
         incomeSource_id: Number(incomeSourceId),
         student_id: uid,
-        income_currency: String(incomeCurrency).toUpperCase(),
+
+        income_currency: cur,
         income_amount_original: Number(amt),
+        exchange_rate_to_inr: Number(fx.rate),
+        rate_date: incomeDate,
       };
 
       const { error } = await insertIncome(payload);
@@ -1311,26 +1412,36 @@ const ExpenseManagerWorking = ({ onBack }) => {
     } finally {
       setSavingIncome(false);
     }
-  };
+  }, [
+    incomeAmount,
+    incomeDate,
+    incomeSourceId,
+    incomeCurrency,
+    uid,
+    insertIncome,
+    loadIncomes,
+    notify,
+    isFutureDate,
+  ]);
 
-  const startEditIncome = (row) => {
+  const startEditIncome = useCallback((row) => {
     setEditIncomeId(row.id);
     const orig = row.income_amount_original ?? row.income_amount ?? "";
     setEditIncomeAmount(String(orig));
     setEditIncomeDate(row.income_date || "");
     setEditIncomeSourceId(String(row.incomeSource_id ?? ""));
     setEditIncomeCurrency(String(row.income_currency || "INR"));
-  };
+  }, []);
 
-  const cancelEditIncome = () => {
+  const cancelEditIncome = useCallback(() => {
     setEditIncomeId(null);
     setEditIncomeAmount("");
     setEditIncomeDate("");
     setEditIncomeSourceId("");
     setEditIncomeCurrency("INR");
-  };
+  }, []);
 
-  const updateIncome = async () => {
+  const updateIncome = useCallback(async () => {
     const amt = numOrNaN(editIncomeAmount);
     if (!editIncomeDate) return notify("Select income date", "error");
     if (isFutureDate(editIncomeDate)) return notify("Future dates not allowed", "error");
@@ -1340,17 +1451,21 @@ const ExpenseManagerWorking = ({ onBack }) => {
 
     setSavingIncome(true);
     try {
-      const inrAmount =
-        String(editIncomeCurrency).toUpperCase() === "INR"
-          ? amt
-          : await convertFrankfurter(amt, editIncomeCurrency, "INR");
+      const cur = String(editIncomeCurrency).toUpperCase();
+      const fx = cur === "INR" ? { value: amt, rate: 1 } : await convertFx(amt, cur, "INR");
+
+      const inrValue = Number(fx.value);
 
       const payload = {
-        income_amount: Number(inrAmount), // ✅ INR in DB
+        income_amount: inrValue,
+        income_amount_inr: inrValue,
         income_date: editIncomeDate,
         incomeSource_id: Number(editIncomeSourceId),
-        income_currency: String(editIncomeCurrency).toUpperCase(),
+
+        income_currency: cur,
         income_amount_original: Number(amt),
+        exchange_rate_to_inr: Number(fx.rate),
+        rate_date: editIncomeDate,
       };
 
       const { error } = await updateIncomeRow(editIncomeId, payload);
@@ -1364,18 +1479,32 @@ const ExpenseManagerWorking = ({ onBack }) => {
     } finally {
       setSavingIncome(false);
     }
-  };
+  }, [
+    editIncomeAmount,
+    editIncomeDate,
+    editIncomeSourceId,
+    editIncomeCurrency,
+    editIncomeId,
+    updateIncomeRow,
+    notify,
+    cancelEditIncome,
+    loadIncomes,
+    isFutureDate,
+  ]);
 
-  const deleteIncome = async (id) => {
-    const ok = window.confirm("Delete this income?");
-    if (!ok) return;
-    const { error } = await supabase.from("tbl_income").delete().eq("id", id);
-    if (error) return notify(error.message || "Delete failed", "error");
-    notify("Removed", "info");
-    loadIncomes();
-  };
+  const deleteIncome = useCallback(
+    async (id) => {
+      const ok = window.confirm("Delete this income?");
+      if (!ok) return;
+      const { error } = await supabase.from("tbl_income").delete().eq("id", id);
+      if (error) return notify(error.message || "Delete failed", "error");
+      notify("Removed", "info");
+      loadIncomes();
+    },
+    [loadIncomes, notify]
+  );
 
-  const doCalc = () => {
+  const doCalc = useCallback(() => {
     const a = Number(calcA);
     const b = Number(calcB);
     if (Number.isNaN(a) || Number.isNaN(b)) return setCalcResult("Invalid");
@@ -1385,9 +1514,9 @@ const ExpenseManagerWorking = ({ onBack }) => {
     if (calcOp === "*") r = a * b;
     if (calcOp === "/") r = b === 0 ? "Infinity" : a / b;
     setCalcResult(String(r));
-  };
+  }, [calcA, calcB, calcOp]);
 
-  const convertCurrency = async () => {
+  const convertCurrency = useCallback(async () => {
     const amt = numOrNaN(curAmt);
     if (!curAmt || Number.isNaN(amt)) return notify("Enter valid amount", "error");
     if (!fromCur || !toCur) return notify("Select currencies", "error");
@@ -1395,14 +1524,15 @@ const ExpenseManagerWorking = ({ onBack }) => {
     setCurLoading(true);
     setCurResult("");
     try {
-      const val = await convertFrankfurter(amt, fromCur, toCur);
-      setCurResult(`${amt} ${String(fromCur).toUpperCase()} = ${val} ${String(toCur).toUpperCase()}`);
+      const fx = await convertFx(amt, fromCur, toCur);
+      setCurResult(`${amt} ${String(fromCur).toUpperCase()} = ${fx.value} ${String(toCur).toUpperCase()}`);
     } catch (e) {
+      notify(e?.message || "Conversion error", "error");
       setCurResult("Conversion error");
     } finally {
       setCurLoading(false);
     }
-  };
+  }, [curAmt, fromCur, toCur, notify]);
 
   if (!uid) {
     return (
@@ -1414,25 +1544,23 @@ const ExpenseManagerWorking = ({ onBack }) => {
 
   const savingsRate = totalInc > 0 ? Math.round(((totalInc - totalExp) / totalInc) * 100) : 0;
 
-  // ✅ Display helper: if original fields exist, show them; otherwise show INR
   const fmtMoney = (rowType, row) => {
     if (rowType === "income") {
       const ccy = row.income_currency;
       const orig = row.income_amount_original;
       if (ccy && orig != null) return `${ccy} ${Number(orig).toLocaleString()}`;
-      return `INR ₹${Number(row.income_amount || 0).toLocaleString()}`;
+      const inr = Number(row.income_amount_inr ?? row.income_amount ?? 0);
+      return `INR ₹${inr.toLocaleString()}`;
     }
     const ccy = row.expense_currency;
     const orig = row.expense_amount_original;
     if (ccy && orig != null) return `${ccy} ${Number(orig).toLocaleString()}`;
-    return `INR ₹${Number(row.expense_amount || 0).toLocaleString()}`;
+    const inr = Number(row.expense_amount_inr ?? row.expense_amount ?? 0);
+    return `INR ₹${inr.toLocaleString()}`;
   };
 
   return (
     <>
-      <style dangerouslySetInnerHTML={{ __html: GLOBAL_CSS }} />
-
-      {/* ✅ This plus removal of layout animations removes the “page shaking” */}
       <MotionConfig reducedMotion="user">
         <div
           style={{
@@ -1570,10 +1698,23 @@ const ExpenseManagerWorking = ({ onBack }) => {
                 </div>
 
                 <div style={{ textAlign: "right" }}>
-                  <Typography sx={{ color: "rgba(255,255,255,0.18)", fontFamily: "'Outfit',sans-serif", fontSize: 12 }}>
+                  <Typography
+                    sx={{
+                      color: "rgba(255,255,255,0.18)",
+                      fontFamily: "'Outfit',sans-serif",
+                      fontSize: 12,
+                    }}
+                  >
                     {now.toLocaleDateString("en-IN", { day: "numeric", month: "long", year: "numeric" })}
                   </Typography>
-                  <Typography sx={{ color: "rgba(255,255,255,0.1)", fontFamily: "'Outfit',sans-serif", fontSize: 11, mt: 0.3 }}>
+                  <Typography
+                    sx={{
+                      color: "rgba(255,255,255,0.1)",
+                      fontFamily: "'Outfit',sans-serif",
+                      fontSize: 11,
+                      mt: 0.3,
+                    }}
+                  >
                     {now.toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" })}
                   </Typography>
                 </div>
@@ -1582,8 +1723,22 @@ const ExpenseManagerWorking = ({ onBack }) => {
 
             {/* KPI */}
             <div style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 14 }}>
-              <KpiCard label="Total Income (INR)" value={totalInc} color={C.inc} icon={<TrendingUpRoundedIcon />} delay={0.06} subtitle={`${incomes.length} transactions`} />
-              <KpiCard label="Total Expense (INR)" value={totalExp} color={C.exp} icon={<TrendingDownRoundedIcon />} delay={0.1} subtitle={`${expenses.length} transactions`} />
+              <KpiCard
+                label="Total Income (INR)"
+                value={totalInc}
+                color={C.inc}
+                icon={<TrendingUpRoundedIcon />}
+                delay={0.06}
+                subtitle={`${incomes.length} transactions`}
+              />
+              <KpiCard
+                label="Total Expense (INR)"
+                value={totalExp}
+                color={C.exp}
+                icon={<TrendingDownRoundedIcon />}
+                delay={0.1}
+                subtitle={`${expenses.length} transactions`}
+              />
               <KpiCard
                 label="Net Balance (INR)"
                 value={Math.abs(balance)}
@@ -1593,7 +1748,14 @@ const ExpenseManagerWorking = ({ onBack }) => {
                 delay={0.14}
                 subtitle={balance >= 0 ? "Surplus" : "Deficit"}
               />
-              <KpiCard label="Transactions" value={incomes.length + expenses.length} color={C.teal} icon={<BarChartRoundedIcon />} delay={0.18} subtitle="Total records" />
+              <KpiCard
+                label="Transactions"
+                value={incomes.length + expenses.length}
+                color={C.teal}
+                icon={<BarChartRoundedIcon />}
+                delay={0.18}
+                subtitle="Total records"
+              />
             </div>
 
             {/* Budget bar */}
@@ -1606,7 +1768,16 @@ const ExpenseManagerWorking = ({ onBack }) => {
                 style={{ padding: "16px 24px" }}
               >
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
-                  <Typography sx={{ color: "rgba(255,255,255,0.5)", fontFamily: "'Outfit',sans-serif", fontSize: 11, letterSpacing: "0.12em", textTransform: "uppercase", fontWeight: 600 }}>
+                  <Typography
+                    sx={{
+                      color: "rgba(255,255,255,0.5)",
+                      fontFamily: "'Outfit',sans-serif",
+                      fontSize: 11,
+                      letterSpacing: "0.12em",
+                      textTransform: "uppercase",
+                      fontWeight: 600,
+                    }}
+                  >
                     Budget Health (INR)
                   </Typography>
                   <Typography sx={{ color: balance >= 0 ? C.inc : C.exp, fontFamily: "'Outfit',sans-serif", fontSize: 12, fontWeight: 700 }}>
@@ -1621,7 +1792,8 @@ const ExpenseManagerWorking = ({ onBack }) => {
                     style={{
                       height: "100%",
                       borderRadius: 10,
-                      background: totalExp / totalInc > 0.8 ? `linear-gradient(90deg, ${C.gold}, ${C.exp})` : `linear-gradient(90deg, ${C.v400}, ${C.inc})`,
+                      background:
+                        totalExp / totalInc > 0.8 ? `linear-gradient(90deg, ${C.gold}, ${C.exp})` : `linear-gradient(90deg, ${C.v400}, ${C.inc})`,
                       boxShadow: `0 0 10px ${totalExp / totalInc > 0.8 ? C.exp : C.v300}50`,
                     }}
                   />
@@ -1700,10 +1872,26 @@ const ExpenseManagerWorking = ({ onBack }) => {
                           </div>
                         )}
                         <div>
-                          <Typography sx={{ color: "white", fontFamily: "'Outfit',sans-serif", fontSize: 15, fontWeight: 700, lineHeight: 1.2 }}>
+                          <Typography
+                            sx={{
+                              color: "white",
+                              fontFamily: "'Outfit',sans-serif",
+                              fontSize: 15,
+                              fontWeight: 700,
+                              lineHeight: 1.2,
+                            }}
+                          >
                             {profile.student_name}
                           </Typography>
-                          <div className="em-tag" style={{ marginTop: 5, background: C.glowS, color: C.v100, border: `1px solid ${C.v300}30` }}>
+                          <div
+                            className="em-tag"
+                            style={{
+                              marginTop: 5,
+                              background: C.glowS,
+                              color: C.v100,
+                              border: `1px solid ${C.v300}30`,
+                            }}
+                          >
                             <AutoAwesomeRoundedIcon style={{ fontSize: 9 }} /> Student
                           </div>
                         </div>
@@ -1829,10 +2017,26 @@ const ExpenseManagerWorking = ({ onBack }) => {
                             boxShadow: `inset 0 1px 0 rgba(255,255,255,0.04)`,
                           }}
                         >
-                          <Typography sx={{ color: "rgba(255,255,255,0.35)", fontFamily: "'Outfit',sans-serif", fontSize: 10.5, letterSpacing: "0.14em", textTransform: "uppercase" }}>
+                          <Typography
+                            sx={{
+                              color: "rgba(255,255,255,0.35)",
+                              fontFamily: "'Outfit',sans-serif",
+                              fontSize: 10.5,
+                              letterSpacing: "0.14em",
+                              textTransform: "uppercase",
+                            }}
+                          >
                             Result
                           </Typography>
-                          <Typography sx={{ color: C.gold, fontFamily: "'Instrument Serif',serif", fontSize: 36, fontWeight: 400, lineHeight: 1 }}>
+                          <Typography
+                            sx={{
+                              color: C.gold,
+                              fontFamily: "'Instrument Serif',serif",
+                              fontSize: 36,
+                              fontWeight: 400,
+                              lineHeight: 1,
+                            }}
+                          >
                             {calcResult}
                           </Typography>
                         </motion.div>
@@ -1842,7 +2046,7 @@ const ExpenseManagerWorking = ({ onBack }) => {
                 </div>
               </motion.div>
 
-              {/* Currency (Full) */}
+              {/* Currency */}
               <motion.div
                 initial={{ opacity: 0, y: 16 }}
                 animate={{ opacity: 1, y: 0 }}
@@ -1863,7 +2067,9 @@ const ExpenseManagerWorking = ({ onBack }) => {
                       InputProps={{
                         startAdornment: (
                           <InputAdornment position="start">
-                            <span style={{ color: "rgba(255,255,255,0.28)", fontSize: 13, fontFamily: "'Outfit',sans-serif" }}>Amount</span>
+                            <span style={{ color: "rgba(255,255,255,0.28)", fontSize: 13, fontFamily: "'Outfit',sans-serif" }}>
+                              Amount
+                            </span>
                           </InputAdornment>
                         ),
                       }}
@@ -1871,13 +2077,7 @@ const ExpenseManagerWorking = ({ onBack }) => {
                     />
 
                     <div style={{ display: "grid", gridTemplateColumns: "1fr 40px 1fr", gap: 8, alignItems: "center" }}>
-                      <CustomSelect
-                        value={fromCur}
-                        onChange={setFromCur}
-                        options={currencyOptions}
-                        placeholder="From"
-                        accentColor={C.teal}
-                      />
+                      <CustomSelect value={fromCur} onChange={setFromCur} options={currencyOptions} placeholder="From" accentColor={C.teal} />
 
                       <motion.div
                         whileHover={{ scale: 1.12 }}
@@ -1961,7 +2161,16 @@ const ExpenseManagerWorking = ({ onBack }) => {
                             boxShadow: `inset 0 1px 0 rgba(255,255,255,0.04)`,
                           }}
                         >
-                          <Typography sx={{ color: "rgba(255,255,255,0.3)", fontFamily: "'Outfit',sans-serif", fontSize: 10.5, letterSpacing: "0.1em", textTransform: "uppercase", mb: 0.5 }}>
+                          <Typography
+                            sx={{
+                              color: "rgba(255,255,255,0.3)",
+                              fontFamily: "'Outfit',sans-serif",
+                              fontSize: 10.5,
+                              letterSpacing: "0.1em",
+                              textTransform: "uppercase",
+                              mb: 0.5,
+                            }}
+                          >
                             Result
                           </Typography>
                           <Typography sx={{ color: C.teal, fontFamily: "'Instrument Serif',serif", fontSize: 22, fontWeight: 400 }}>
@@ -2050,7 +2259,7 @@ const ExpenseManagerWorking = ({ onBack }) => {
                               </div>
                             </div>
                             <Typography sx={{ color: "rgba(255,255,255,0.4)", fontFamily: "'Outfit',sans-serif", fontSize: 12 }}>
-                              ₹{Number(row.income_amount || 0).toLocaleString()}
+                              ₹{Number(row.income_amount_inr ?? row.income_amount ?? 0).toLocaleString()}
                             </Typography>
                             <div className="em-row-actions" style={{ display: "flex", gap: 4, justifyContent: "center" }}>
                               <Btn tip="Edit" color="#60a5fa" onClick={() => startEditIncome(row)} icon={EditRoundedIcon} />
@@ -2137,7 +2346,7 @@ const ExpenseManagerWorking = ({ onBack }) => {
                               </div>
                             </div>
                             <Typography sx={{ color: "rgba(255,255,255,0.4)", fontFamily: "'Outfit',sans-serif", fontSize: 12 }}>
-                              ₹{Number(row.expense_amount || 0).toLocaleString()}
+                              ₹{Number(row.expense_amount_inr ?? row.expense_amount ?? 0).toLocaleString()}
                             </Typography>
                             <div className="em-row-actions" style={{ display: "flex", gap: 4, justifyContent: "center" }}>
                               <Btn tip="Edit" color="#60a5fa" onClick={() => startEditExpense(row)} icon={EditRoundedIcon} />
@@ -2152,9 +2361,8 @@ const ExpenseManagerWorking = ({ onBack }) => {
               </motion.div>
             </div>
 
-            {/* Small hint */}
             <div style={{ opacity: 0.55, fontFamily: "'Outfit',sans-serif", fontSize: 12 }}>
-              Note: Totals & KPIs are calculated in <b>INR</b>. If you created currency columns, original amounts/currencies are preserved.
+              Note: Totals & KPIs are calculated in <b>INR</b>. Original currency is stored per entry.
             </div>
           </div>
         </div>

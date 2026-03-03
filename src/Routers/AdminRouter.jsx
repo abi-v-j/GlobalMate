@@ -10,6 +10,7 @@ import Reply from "../Admin/Pages/Reply/Reply";
 import ViewComplaint from "../Admin/Pages/ViewComplaint/ViewComplaint";
 import Registration from "../Admin/Pages/AdminRegistration/Registration";
 import IncomeSource from "../Admin/Pages/IncomeSource/IncomeSource";
+import ViewJobApplications from "../Admin/Pages/ViewJobApplications/ViewJobApplications";
 
 
 const AdminRouter = () => {
@@ -25,6 +26,7 @@ const AdminRouter = () => {
             <Route path="reply" element={<Reply />} />
             <Route path="viewcomplaint" element={<ViewComplaint />} />
             <Route path="registration" element={<Registration />} />
+            <Route path="viewApplications" element={<ViewJobApplications />} />
 
 
 
